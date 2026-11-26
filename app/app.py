@@ -145,47 +145,48 @@ def tags(x):
     if (x.get("前走からの日数") or 0) >= 70:
         out.append(f"休み明け（{int(x['前走からの日数'])}日ぶり）")
     if (x.get("過去の出走数") or 0) == 0:
-        out.append("初出走")
+        out.append("⚠️データなし（海外馬・初出走など。AIは評価できない）")
     return out
 
 
-# ---------------- 画面：左のメニュー ----------------
-st.sidebar.title("🏇 競馬AI")
-st.sidebar.caption("フル版（自分のMacだけで動く）")
+# ---------------- 画面：レースを選ぶ（ページの一番上） ----------------
+st.title("🏇 競馬AI")
+st.caption("フル版（自分のMacだけで動く）")
+box = st.expander("🏁 レースを選ぶ", expanded=True)
 
 saved = saved_races()
-mode = st.sidebar.radio("レースの選び方", ["予想済みのレース", "新しく予想する"], horizontal=True)
+mode = box.radio("レースの選び方", ["予想済みのレース", "新しく予想する"], horizontal=True)
 rid = date = None
 
 if mode == "予想済みのレース":
     if not saved:
-        st.sidebar.info("まだ予想したレースがありません。「新しく予想する」から始めてください。")
+        box.info("まだ予想したレースがありません。「新しく予想する」から始めてください。")
     else:
-        pick = st.sidebar.selectbox("レース", saved, format_func=lambda r: r["名前"])
+        pick = box.selectbox("レース", saved, format_func=lambda r: r["名前"])
         rid, date = pick["race_id"], pick["date"]
 else:
     today = dt.date.today()
     next_sat = today + dt.timedelta(days=(5 - today.weekday()) % 7)
-    d = st.sidebar.date_input("開催日", next_sat)
+    d = box.date_input("開催日", next_sat)
     date = d.strftime("%Y-%m-%d")
-    only_graded = st.sidebar.toggle("重賞だけ表示", value=True)
+    only_graded = box.toggle("重賞だけ表示", value=True)
     try:
         races = [r for r in race_list(date) if not r["予想できない"] and (r["グレード"] or not only_graded)]
     except requests.exceptions.SSLError:
-        st.sidebar.error("netkeibaにつながりません（SSLのエラー）。ネットワークを切り替えてから、もう一度試してください。")
+        box.error("netkeibaにつながりません（SSLのエラー）。ネットワークを切り替えてから、もう一度試してください。")
         races = []
     except Exception as e:
-        st.sidebar.error(f"レース一覧を取れませんでした：{e}")
+        box.error(f"レース一覧を取れませんでした：{e}")
         races = []
     if not races:
-        st.sidebar.info("この日の対象レースが見つかりません。")
+        box.info("この日の対象レースが見つかりません。")
     else:
-        pick = st.sidebar.selectbox("レース", races,
+        pick = box.selectbox("レース", races,
                                     format_func=lambda r: (f"【{r['グレード']}】" if r["グレード"] else "") + r["名前"])
         need_train = not load_models(date)
         if need_train:
-            st.sidebar.caption("⏳ この日のAIはまだ学習していないので、最初は5分くらいかかります。")
-        if st.sidebar.button("AIで予想する", type="primary", use_container_width=True):
+            box.caption("⏳ この日のAIはまだ学習していないので、最初は5分くらいかかります。")
+        if box.button("AIで予想する", type="primary", use_container_width=True):
             with st.spinner("出馬表を取って、AIが予想しています…"):
                 p = subprocess.run([PY, os.path.join(SRC, "predict_race.py"), date, pick["race_id"]],
                                    cwd=ROOT, capture_output=True, text=True)
@@ -200,13 +201,11 @@ else:
         if last and last[0] == pick["race_id"] and last[1] == date:
             rid = last[0]
 
-st.sidebar.divider()
-st.sidebar.caption("※ 予想は参考情報です。馬券は自己責任で。20歳未満は馬券を買えません。")
+st.caption("※ 予想は参考情報です。馬券は自己責任で。20歳未満は馬券を買えません。")
 
 # ---------------- 画面：メイン ----------------
 if not rid or not os.path.exists(os.path.join(PRED, f"race_{rid}.pkl")):
-    st.title("🏇 競馬AI")
-    st.write("左のメニューからレースを選んでください。")
+    st.write("上の「レースを選ぶ」から、レースを選んでください。")
     st.stop()
 
 t = pd.read_pickle(os.path.join(PRED, f"race_{rid}.pkl")).reset_index(drop=True)
@@ -217,7 +216,7 @@ if not models:
 
 # 馬場状態（まだ発表前なら空）
 baba = t["馬場状態"].iloc[0] if pd.notna(t["馬場状態"].iloc[0]) else "未発表"
-st.title(f"{PLACE.get(rid[4:6], '')}{int(rid[10:])}R　{t['レース名'].iloc[0]}")
+st.header(f"{PLACE.get(rid[4:6], '')}{int(rid[10:])}R　{t['レース名'].iloc[0]}")
 info = t["条件"].iloc[0] if "条件" in t else f"{t['コース'].iloc[0]}{int(t['距離'].iloc[0])}m"
 st.caption(f"{t['date'].iloc[0]:%Y年%m月%d日}　{info}　{len(t)}頭")
 

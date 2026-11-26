@@ -34,7 +34,11 @@ def shutuba(rid):
     cond = " ".join(s.select_one(".RaceData01").get_text(" ", strip=True).split())
     info2 = " ".join(s.select_one(".RaceData02").get_text(" ", strip=True).split())
     m = re.search(r"(芝|ダ|障)(\d+)m", cond)
-    baba = find(r"馬場:(\S+)", cond)
+    # 天気：前は「天候:晴」、2026年秋からは天気マークの title に「晴」と入っている
+    icon = s.select_one(".RaceData01 [class*=Icon_Weather]")
+    weather = find(r"天候:(\S+)", cond) or (icon.get("title") if icon else None)
+    # 馬場：前は「馬場:良」、2026年秋からは「/ 良 /」や「/ 予報 重 /」と書かれている
+    baba = find(r"馬場:(\S+)", cond) or find(r"/\s*(?:予報\s*)?(良|稍重|稍|重|不良|不)\s*(?:/|$)", cond)
     rows = []
     for i, tr in enumerate(s.select("table.Shutuba_Table tr.HorseList"), 1):
         info = tr.select_one(".HorseInfo")
@@ -51,7 +55,7 @@ def shutuba(rid):
                      "馬体重": tr.select_one(".Weight").get_text("", strip=True).replace(" ", "") if tr.select_one(".Weight") else "",
                      "調教師": ("[東]" if "美浦" in trainer else "[西]") + trainer.split()[-1], "賞金(万円)": "0", "date": DATE,
                      "レース名": s.select_one(".RaceName").get_text(strip=True), "コース": m.group(1), "距離": int(m.group(2)),
-                     "回り": find(r"(左|右|直線)", cond), "天候": find(r"天候:(\S+)", cond), "馬場状態": BABA.get(baba[:1], baba) if baba else None,
+                     "回り": find(r"(左|右|直線)", cond), "天候": weather, "馬場状態": BABA.get(baba[:1], baba) if baba else None,
                      "horse_id": link(".HorseInfo"), "jockey_id": link(".Jockey"), "trainer_id": link(".Trainer"),
                      "本賞金": float(find(r"本賞金:(\d+)", info2) or 0)})
     ent = pd.DataFrame(rows)
@@ -119,6 +123,7 @@ t["確率"] = np.mean([mm.predict(t[FEATURES]) for mm in models], axis=0)
 t["確率"] = t["確率"] / t.groupby("race_id")["確率"].transform("sum") * 3
 for rid in RACES:
     r = t[t["race_id"] == rid].sort_values("確率", ascending=False)
+    r["条件"] = conds[rid]   # 発走時刻・距離・馬場など（アプリで表示する）
     r.to_pickle(os.path.join(OUT, f"race_{rid}.pkl"))
     o = odds(rid)
     place = {"01": "札幌", "02": "函館", "03": "福島", "04": "新潟", "05": "東京", "06": "中山", "07": "中京", "08": "京都", "09": "阪神", "10": "小倉"}.get(rid[4:6], "")

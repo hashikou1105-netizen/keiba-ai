@@ -442,3 +442,35 @@ def add_new_history(df):
     df["_spot"] = df["場"] + df["コース"].astype(str) + df["距離"].astype(str)
     df = add_condition_history(df, "_spot", "同じ競馬場・コース・距離")
     return df.drop(columns=[c for c in df.columns if c.startswith("_")])
+
+
+# ---- 今日の馬場に合わせたヒント（2026-11-26 追加の実験）
+BABA_FEATURES = ["今日は道悪", "今日の馬場の出走数", "今日の馬場の3着以内率", "今日の馬場の得意さ"]
+WET = ["稍重", "重", "不良"]
+
+
+def add_baba_parts(df):
+    """馬ごと・芝ダートごとに、道悪と良馬場それぞれの「今回より前」の成績（今日の馬場のヒントの材料）"""
+    df = df.copy()
+    jra = df["海外"] != 1 if "海外" in df else pd.Series(True, index=df.index)
+    j = df[jra].copy()
+    wet = j["馬場状態"].isin(WET).astype(int)
+    j["_w"], j["_wt"], j["_d"], j["_dt"] = wet, wet * j["3着以内"], 1 - wet, (1 - wet) * j["3着以内"]
+    g = j.groupby(["horse_id", "コース"])
+    for c in ["_w", "_wt", "_d", "_dt"]:
+        j[c + "s"] = g[c].cumsum() - j[c]
+    df.loc[jra, "道悪の回数"] = j["_ws"]
+    df.loc[jra, "良の回数"] = j["_ds"]
+    df.loc[jra, "道悪の率"] = j["_wts"] / j["_ws"].replace(0, np.nan)
+    df.loc[jra, "良の率"] = j["_dts"] / j["_ds"].replace(0, np.nan)
+    return add_baba_features(df)
+
+
+def add_baba_features(df):
+    """今日の馬場状態から、今日の馬場のヒントを作る（アプリの「もしも馬場」でも、これを呼び直す）"""
+    wet = df["馬場状態"].astype(str).isin(WET)
+    df["今日は道悪"] = wet.astype(int)
+    df["今日の馬場の出走数"] = np.where(wet, df["道悪の回数"], df["良の回数"])
+    df["今日の馬場の3着以内率"] = np.where(wet, df["道悪の率"], df["良の率"])
+    df["今日の馬場の得意さ"] = np.where(wet, df["道悪の率"] - df["良の率"], df["良の率"] - df["道悪の率"])
+    return df

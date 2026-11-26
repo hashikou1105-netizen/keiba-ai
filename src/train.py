@@ -7,6 +7,7 @@ from sklearn.metrics import roc_auc_score
 
 from features import make_features
 from features import add_form_history, FORM_FEATURES
+from features import add_new_history, NEW_GROUPS
 
 # AI に渡すヒント（特徴量）
 # ※ そのレースの結果（着順・タイム・上り・賞金など）は答えそのものなので、絶対に入れない
@@ -47,6 +48,9 @@ FEATURES = [
 # 調子のヒント（2026-11-19 追加：前走の人気・近走の流れ・休み明け何戦目・道悪の成績など）
 FEATURES = FEATURES + FORM_FEATURES
 
+# 季節・脚質・枠の有利さ・騎手の相性・同じ舞台のヒント（2026-11-24 追加）
+FEATURES = FEATURES + sum(NEW_GROUPS.values(), [])
+
 # 文字のヒント（AI に「これは種類を表す文字だよ」と教える）
 CATEGORIES = ["場", "コース", "回り", "馬場状態", "天候", "性別", "所属"]
 
@@ -64,7 +68,7 @@ def load_fukusho():
 
 
 # ---- 1. データを用意する（ヒントは全レースを使って作る）
-df = add_form_history(make_features())
+df = add_new_history(add_form_history(make_features()))
 for c in CATEGORIES:
     df[c] = df[c].astype("category")
 

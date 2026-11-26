@@ -90,6 +90,8 @@ df = F.add_person_history(df, "jockey_id", "騎手", "騎手の騎乗数")
 df = F.add_person_history(df, "trainer_id", "調教師", "調教師の出走数")
 df = F.add_race_comparison(df)
 df = F.add_form_history(df)   # 調子のヒント
+df = F.add_new_history(df)    # 季節・脚質・枠・騎手の相性・同じ舞台のヒント
+today = df["race_id"].isin(RACES)   # 並べ直したので、今日のレースの印を付け直す
 for c in CATEGORIES:
     df[c] = df[c].astype("category")
 
@@ -103,7 +105,7 @@ P = {"objective": "binary", "learning_rate": 0.03, "num_leaves": 63, "min_data_i
      "feature_fraction": 0.8, "bagging_fraction": 0.8, "bagging_freq": 1, "verbose": -1}
 models = []
 for seed in range(3):
-    path = os.path.join(MODELS, f"model_{DATE}_form_{seed}.txt")
+    path = os.path.join(MODELS, f"model_{DATE}_v3_{seed}.txt")
     if os.path.exists(path):
         models.append(lgb.Booster(model_file=path)); continue
     m1 = lgb.train({**P, "seed": seed}, lgb.Dataset(tr_[FEATURES], tr_["3着以内"]), 3000,

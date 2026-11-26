@@ -18,3 +18,6 @@ note/
 # Mac・VS Code
 .DS_Store
 .vscode/
+
+# CatBoostが勝手に作る学習の記録
+catboost_info/

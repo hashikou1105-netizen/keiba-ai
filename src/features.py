@@ -392,3 +392,53 @@ def add_extra_history(df):
     for c in [c for c in EXTRA_FEATURES if c.startswith(("父", "母父"))]:
         df.loc[df["父_id"].isna() if c.startswith("父") else df["母父_id"].isna(), c] = np.nan
     return df.drop(columns=[c for c in df.columns if c.startswith("_")])
+
+
+# ---- 季節・脚質・枠・騎手の相性のヒント（2026-11-23 追加の実験）
+SEASON_FEATURES = ["月", "同じ季節の出走数", "同じ季節の3着以内率", "同じ季節とほかの季節の3着以内率の差"]
+STYLE_FEATURES = ["過去5走の先行度", "過去5走の先行度のレース内順位", "レース内の先行馬の数"]
+GATE_FEATURES = ["この枠の位置の有利さ"]
+JOCKEY_FIT_FEATURES = ["騎手のこの競馬場の成績", "騎手と調教師のコンビの成績"]
+SPOT_FEATURES = ["同じ競馬場・コース・距離の出走数", "同じ競馬場・コース・距離の3着以内率"]
+NEW_GROUPS = {"季節": SEASON_FEATURES, "脚質": STYLE_FEATURES, "枠の有利さ": GATE_FEATURES,
+              "騎手の相性": JOCKEY_FIT_FEATURES, "同じ舞台": SPOT_FEATURES}
+
+
+def add_new_history(df):
+    """季節（冬に強い馬など）・脚質（前に行く馬か）・枠の有利さ・騎手の相性・まったく同じ舞台の成績"""
+    df = df.copy()
+    df = df.sort_values(["date", "race_id", "馬番"]).reset_index(drop=True)
+    done = df["着順"].notna()   # もう結果が出ているレース
+
+    # 季節：冬（11〜2月）・春（3〜5月）・夏（6〜8月）・秋（9〜10月）
+    df["月"] = df["date"].dt.month
+    df["_season"] = df["月"].map({11: 0, 12: 0, 1: 0, 2: 0, 3: 1, 4: 1, 5: 1, 6: 2, 7: 2, 8: 2, 9: 3, 10: 3})
+    g = df.groupby(["horse_id", "_season"])
+    n_same = g.cumcount()
+    hit_same = g["3着以内"].cumsum() - df["3着以内"]
+    df["同じ季節の出走数"] = n_same
+    df["同じ季節の3着以内率"] = hit_same / n_same.replace(0, np.nan)
+    h = df.groupby("horse_id")
+    n_all = h.cumcount()
+    hit_all = h["3着以内"].cumsum() - df["3着以内"]
+    df["同じ季節とほかの季節の3着以内率の差"] = df["同じ季節の3着以内率"] - (hit_all - hit_same) / (n_all - n_same).replace(0, np.nan)
+
+    # 脚質：最初のコーナーで前から何割の位置にいたか（0に近いほど前に行く馬）
+    df["_pos"] = (df["最初のコーナー"] - 1) / (df["出走頭数"] - 1).clip(lower=1)
+    df["過去5走の先行度"] = past_average(df, "_pos")
+    df["過去5走の先行度のレース内順位"] = df.groupby("race_id")["過去5走の先行度"].rank(method="min")
+    df["レース内の先行馬の数"] = df.groupby("race_id")["過去5走の先行度"].transform(lambda s: (s < 0.25).sum())
+
+    # 枠の有利さ：同じ競馬場・コース・距離で、内〜外（5段階）の馬が、頭数から見た平均よりどれだけ来ていたか
+    df["_gate"] = pd.cut((df["馬番"] - 0.5) / df["出走頭数"], [0, .2, .4, .6, .8, 1], labels=False)
+    df["_over"] = (df["3着以内"] - 3 / df["出走頭数"]).where(done)
+    df["この枠の位置の有利さ"] = prior_mean(df, ["場", "コース", "距離", "_gate"], "_over", 200)
+
+    # 騎手の相性：その競馬場での成績、その調教師と組んだときの成績（頭数から見た平均との差）
+    df["騎手のこの競馬場の成績"] = prior_mean(df, ["jockey_id", "場"], "_over", 50)
+    df["騎手と調教師のコンビの成績"] = prior_mean(df, ["jockey_id", "trainer_id"], "_over", 30)
+
+    # まったく同じ舞台（競馬場・コース・距離）での、その馬の成績
+    df["_spot"] = df["場"] + df["コース"].astype(str) + df["距離"].astype(str)
+    df = add_condition_history(df, "_spot", "同じ競馬場・コース・距離")
+    return df.drop(columns=[c for c in df.columns if c.startswith("_")])

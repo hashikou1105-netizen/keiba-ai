@@ -1,0 +1,20 @@
+# Pythonの環境（自分のPCだけで使う）
+.venv/
+__pycache__/
+*.pyc
+
+# netkeibaから集めたデータ（他のサイトのデータなので公開しない）
+data/
+
+# 学習したモデル・予想の出力・古いファイル（大きい／毎週変わる）
+models/
+predictions/
+archive/
+experiments/results/*.pkl
+
+# note記事（ブログ用なのでGitHubには上げない）
+note/
+
+# Mac・VS Code
+.DS_Store
+.vscode/
